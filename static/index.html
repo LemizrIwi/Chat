@@ -3,125 +3,26 @@
 <head>
 <meta charset="UTF-8">
 <title>MiChat</title>
-<style>
-    body { font-family: Arial; margin:0; padding:0; background:#1e1e1e; color:#fff; }
-    #login-container, #chat-container { padding:20px; }
-    #messages { height:400px; overflow-y:auto; border:1px solid #444; padding:10px; margin-bottom:10px; background:#2e2e2e; }
-    #messageInput { width:100%; padding:10px; }
-    .online { color: #0f0; }
-    .offline { color: #888; }
-    .admin { font-weight:bold; color:#ff5555; }
-    button { padding:5px 10px; margin-top:5px; }
-</style>
+<link rel="stylesheet" href="/static/style.css">
 </head>
-<body>
-
+<body class="dark">
 <div id="login-container">
-    <h2>MiChat Login/Register</h2>
-    <input type="text" id="username" placeholder="Benutzername"><br>
-    <input type="password" id="password" placeholder="Passwort"><br>
-    <label>Wähle Name-Farbe: <input type="color" id="color" value="#FFFFFF"></label><br>
-    <button onclick="login()">Login</button>
-    <button onclick="register()">Register</button>
+  <h2>MiChat Login / Register</h2>
+  <input type="text" id="username" placeholder="Benutzername">
+  <input type="password" id="password" placeholder="Passwort">
+  <button id="login-btn">Login</button>
+  <button id="register-btn">Register</button>
+  <p id="message"></p>
 </div>
 
 <div id="chat-container" style="display:none;">
-    <h2>MiChat</h2>
-    <div id="messages"></div>
-    <input type="text" id="messageInput" placeholder="Nachricht schreiben">
-    <div id="online-users"></div>
+  <h2>MiChat</h2>
+  <div id="chat-box"></div>
+  <input type="color" id="color-picker" value="#ffffff">
+  <input type="text" id="chat-input" placeholder="Nachricht...">
+  <button id="send-btn">Senden</button>
 </div>
 
-<script>
-let ws;
-let currentUser;
-let usersOnline = {};
-
-async function login() {
-    const username = document.getElementById("username").value.trim();
-    const password = document.getElementById("password").value;
-    const color = document.getElementById("color").value;
-
-    if(!username || !password) { alert("Bitte Benutzername und Passwort eingeben!"); return; }
-
-    const res = await fetch("/login", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({username, password})
-    });
-
-    const data = await res.json();
-
-    if(res.ok) {
-        currentUser = {...data, color};
-        document.getElementById("login-container").style.display = "none";
-        document.getElementById("chat-container").style.display = "block";
-        startWebSocket();
-    } else {
-        alert(data.detail || JSON.stringify(data));
-    }
-}
-
-async function register() {
-    const username = document.getElementById("username").value.trim();
-    const password = document.getElementById("password").value;
-
-    if(!username || !password) { alert("Bitte Benutzername und Passwort eingeben!"); return; }
-
-    const res = await fetch("/register", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({username, password})
-    });
-
-    const data = await res.json();
-
-    if(res.ok) {
-        alert("Benutzer erstellt! Jetzt einloggen.");
-    } else {
-        alert(data.detail || JSON.stringify(data));
-    }
-}
-
-function startWebSocket() {
-    ws = new WebSocket(`ws://${window.location.host}/ws`);
-
-    ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-
-        // Name-Farbe und Admin markieren
-        let nameClass = "";
-        if(msg.username.toLowerCase() === "admin") nameClass = "admin";
-        else nameClass = usersOnline[msg.username] ? "online" : "offline";
-
-        const msgDiv = document.createElement("div");
-        msgDiv.innerHTML = `<span class="${nameClass}" style="color:${msg.color || '#fff'}">[${new Date(msg.timestamp).toLocaleTimeString()}] ${msg.username}:</span> ${msg.content}`;
-        document.getElementById("messages").appendChild(msgDiv);
-        msgDiv.scrollIntoView();
-    };
-
-    // Enter senden
-    const input = document.getElementById("messageInput");
-    input.addEventListener("keydown", function(e){
-        if(e.key === "Enter" && input.value.trim() !== "") {
-            ws.send(JSON.stringify({
-                username: currentUser.username,
-                content: input.value,
-                color: currentUser.color
-            }));
-            input.value = "";
-        }
-    });
-
-    ws.onopen = () => {
-        console.log("WebSocket verbunden!");
-    };
-
-    ws.onclose = () => {
-        console.log("WebSocket getrennt!");
-    };
-}
-</script>
-
+<script src="/static/chat.js"></script>
 </body>
 </html>
