@@ -1,28 +1,26 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, WebSocket, Request, Form, Depends
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from sqlalchemy import Column, Integer, String, Boolean, create_engine
-from sqlalchemy.orm import declarative_base, sessionmaker, Session
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 from passlib.context import CryptContext
-import os
 from datetime import datetime
+import json
 
-# --- FastAPI App ---
 app = FastAPI()
-
-# Statische Dateien bereitstellen
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# --- Datenbank Setup ---
-DATABASE_URL = "sqlite:///./michat.db"
+# Datenbank
+DATABASE_URL = "sqlite:///./chat.db"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
-# --- Password-Hashing ---
+# Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# --- Models ---
+# Models
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
@@ -34,70 +32,87 @@ class User(Base):
 class Message(Base):
     __tablename__ = "messages"
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String)
+    sender = Column(String)
+    color = Column(String)
     content = Column(String)
-    timestamp = Column(String)
+    timestamp = Column(DateTime, default=datetime.utcnow)
 
-# --- Tabellen erstellen ---
 Base.metadata.create_all(bind=engine)
 
-# --- Dependency ---
-def get_db():
+# Admin automatisch anlegen
+def create_admin():
     db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-# --- Admin erstellen ---
-def create_admin(db: Session):
-    admin_user = db.query(User).filter(User.username == "admin").first()
-    if not admin_user:
-        hashed = pwd_context.hash("AdminPass123!")  # Admin-Passwort
-        admin = User(username="admin", password_hash=hashed, color="#ff5555", is_admin=True)
-        db.add(admin)
+    admin = db.query(User).filter(User.username == "admin").first()
+    if not admin:
+        hashed = pwd_context.hash("AdminPass123!"[:72])
+        admin_user = User(username="admin", password_hash=hashed, color="#ff5555", is_admin=True)
+        db.add(admin_user)
         db.commit()
+    db.close()
 
-# Admin beim Start erstellen
-with SessionLocal() as db:
-    create_admin(db)
+create_admin()
 
-# --- Routes ---
-@app.get("/")
-def root():
-    return FileResponse(os.path.join("static", "index.html"))
+# WebSocket Connections
+connections = []
 
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    connections.append(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            data_json = json.loads(data)
+            content = data_json.get("content")
+            sender = data_json.get("sender")
+            color = data_json.get("color")
+            timestamp = datetime.utcnow().strftime("%H:%M:%S")
+
+            # Nachricht speichern
+            db = SessionLocal()
+            msg = Message(sender=sender, color=color, content=content, timestamp=datetime.utcnow())
+            db.add(msg)
+            db.commit()
+            db.close()
+
+            # Nachricht an alle senden
+            for conn in connections:
+                await conn.send_text(json.dumps({
+                    "sender": sender,
+                    "color": color,
+                    "content": content,
+                    "timestamp": timestamp
+                }))
+    except:
+        connections.remove(websocket)
+
+# Login
+@app.post("/login")
+async def login(username: str = Form(...), password: str = Form(...)):
+    db = SessionLocal()
+    user = db.query(User).filter(User.username == username).first()
+    db.close()
+    if not user or not pwd_context.verify(password, user.password_hash):
+        return JSONResponse({"success": False, "error": "Falscher Benutzername oder Passwort"})
+    return {"success": True, "username": user.username, "color": user.color, "is_admin": user.is_admin}
+
+# Register
 @app.post("/register")
-def register(username: str, password: str, db: Session = Depends(get_db)):
-    existing_user = db.query(User).filter(User.username == username).first()
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Username already exists")
-    hashed = pwd_context.hash(password)
-    user = User(username=username, password_hash=hashed)
+async def register(username: str = Form(...), password: str = Form(...), color: str = Form("#000000")):
+    db = SessionLocal()
+    existing = db.query(User).filter(User.username == username).first()
+    if existing:
+        db.close()
+        return JSONResponse({"success": False, "error": "Benutzername existiert bereits"})
+    hashed = pwd_context.hash(password[:72])
+    user = User(username=username, password_hash=hashed, color=color)
     db.add(user)
     db.commit()
-    return {"message": "User registered successfully"}
+    db.close()
+    return {"success": True, "username": username, "color": color}
 
-@app.post("/login")
-def login(username: str, password: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == username).first()
-    if not user or not pwd_context.verify(password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    return {
-        "message": "Login successful",
-        "username": user.username,
-        "color": user.color,
-        "is_admin": user.is_admin
-    }
-
-@app.get("/messages")
-def get_messages(db: Session = Depends(get_db)):
-    return db.query(Message).all()
-
-@app.post("/messages")
-def post_message(username: str, content: str, db: Session = Depends(get_db)):
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    msg = Message(username=username, content=content, timestamp=timestamp)
-    db.add(msg)
-    db.commit()
-    return {"message": "Message sent"}
+# Index
+@app.get("/", response_class=HTMLResponse)
+async def get():
+    with open("static/index.html", "r", encoding="utf-8") as f:
+        return f.read()
