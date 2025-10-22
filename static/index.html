@@ -1,95 +1,33 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
-<meta charset="UTF-8">
-<title>MiChat</title>
-<style>
-  body { background: #1e1e1e; color: white; font-family: Arial, sans-serif; }
-  #chat { height: 400px; overflow-y: scroll; border: 1px solid #444; padding: 10px; margin-bottom: 10px; }
-  .msg { margin-bottom: 5px; }
-  .timestamp { font-size: 0.8em; color: #888; margin-left: 5px; }
-  input, button { padding: 5px; margin: 2px; }
-</style>
+    <meta charset="UTF-8">
+    <title>MiChat</title>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+<div id="login-register">
+    <h2>Login</h2>
+    <input type="text" id="login-username" placeholder="Username">
+    <input type="password" id="login-password" placeholder="Passwort">
+    <button onclick="login()">Login</button>
 
-<h2>MiChat</h2>
+    <h2>Register</h2>
+    <input type="text" id="register-username" placeholder="Username">
+    <input type="password" id="register-password" placeholder="Passwort">
+    <input type="color" id="register-color" value="#000000">
+    <button onclick="register()">Register</button>
 
-<div>
-  <input id="username" placeholder="Benutzername">
-  <input id="password" type="password" placeholder="Passwort">
-  <button onclick="register()">Register</button>
-  <button onclick="login()">Login</button>
+    <p id="error"></p>
 </div>
 
-<div id="chat"></div>
+<div id="chat" style="display:none;">
+    <h2>MiChat</h2>
+    <div id="messages"></div>
+    <input type="text" id="msg-input" placeholder="Nachricht" onkeypress="if(event.key==='Enter'){sendMessage();}">
+    <button onclick="sendMessage()">Senden</button>
+</div>
 
-<input id="message" placeholder="Nachricht schreiben" onkeypress="sendOnEnter(event)">
-<button onclick="sendMessage()">Senden</button>
-
-<script>
-let ws;
-let myUsername;
-let myColor = "#FFFFFF";
-
-function addMessage(username, content, timestamp, color) {
-    const chat = document.getElementById("chat");
-    const div = document.createElement("div");
-    div.className = "msg";
-    div.innerHTML = `<span style="color:${color}">${username}</span>: ${content} <span class="timestamp">${new Date(timestamp).toLocaleTimeString()}</span>`;
-    chat.appendChild(div);
-    chat.scrollTop = chat.scrollHeight;
-}
-
-function connectWebSocket() {
-    ws = new WebSocket(`ws://${location.host}/ws`);
-    ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        addMessage(data.username, data.content, data.timestamp, data.color);
-    };
-}
-
-function register() {
-    const username = document.getElementById("username").value;
-    const password = document.getElementById("password").value;
-    fetch("/register", {
-        method: "POST",
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({username, password})
-    }).then(res => res.json())
-      .then(res => alert(res.message))
-      .catch(err => alert("Fehler"));
-}
-
-function login() {
-    const username = document.getElementById("username").value;
-    const password = document.getElementById("password").value;
-    fetch("/login", {
-        method: "POST",
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({username, password})
-    }).then(res => res.json())
-      .then(res => {
-          alert(res.message);
-          myUsername = res.username;
-          myColor = res.color;
-          connectWebSocket();
-      })
-      .catch(err => alert("Login fehlgeschlagen"));
-}
-
-function sendMessage() {
-    const msgInput = document.getElementById("message");
-    const content = msgInput.value.trim();
-    if(!content || !ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({username: myUsername, content: content, color: myColor}));
-    msgInput.value = "";
-}
-
-function sendOnEnter(e) {
-    if(e.key === "Enter") sendMessage();
-}
-</script>
-
+<script src="/static/main.js"></script>
 </body>
 </html>
