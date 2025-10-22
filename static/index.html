@@ -1,45 +1,107 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
 <meta charset="UTF-8">
 <title>MiChat</title>
 <style>
-body { font-family: sans-serif; background: #121212; color: #fff; }
-#chat { border: 1px solid #555; height: 400px; overflow-y: scroll; padding: 10px; }
-.timestamp { font-size: 0.8em; color: gray; margin-left: 5px; }
-input, button { padding: 5px; }
+    body { font-family: Arial; margin:0; padding:0; background:#1e1e1e; color:#fff; }
+    #login-container, #chat-container { padding:20px; }
+    #messages { height:400px; overflow-y:auto; border:1px solid #444; padding:10px; margin-bottom:10px; background:#2e2e2e; }
+    #messageInput { width:100%; padding:10px; }
+    .online { color: #0f0; }
+    .offline { color: #888; }
+    .admin { font-weight:bold; color:#ff5555; }
+    button { padding:5px 10px; margin-top:5px; }
 </style>
 </head>
 <body>
-<h1>MiChat</h1>
-<div id="chat"></div>
-<input id="username" placeholder="Name">
-<input id="color" type="color" value="#00ff00">
-<input id="message" placeholder="Nachricht">
-<button onclick="sendMessage()">Senden</button>
+
+<div id="login-container">
+    <h2>MiChat Login/Register</h2>
+    <input type="text" id="username" placeholder="Benutzername"><br>
+    <input type="password" id="password" placeholder="Passwort"><br>
+    <label>Wähle Name-Farbe: <input type="color" id="color" value="#FFFFFF"></label><br>
+    <button onclick="login()">Login</button>
+    <button onclick="register()">Register</button>
+</div>
+
+<div id="chat-container" style="display:none;">
+    <h2>MiChat</h2>
+    <div id="messages"></div>
+    <input type="text" id="messageInput" placeholder="Nachricht schreiben">
+    <div id="online-users"></div>
+</div>
 
 <script>
-const chatContainer = document.getElementById("chat");
-const ws = new WebSocket(`ws://${location.host}/ws`);
+let ws;
+let currentUser;
+let usersOnline = {};
 
-ws.onmessage = (event) => {
-    const msg = JSON.parse(event.data);
-    const time = new Date(msg.timestamp);
-    const formattedTime = time.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
-    const div = document.createElement("div");
-    div.innerHTML = `<span style="color:${msg.color || '#fff'}">${msg.username}</span>: ${msg.content} <span class="timestamp">${formattedTime}</span>`;
-    chatContainer.appendChild(div);
-    chatContainer.scrollTop = chatContainer.scrollHeight;
-};
-
-function sendMessage(){
-    const username = document.getElementById("username").value || "Anonymous";
-    const message = document.getElementById("message").value;
+async function login() {
+    const username = document.getElementById("username").value;
+    const password = document.getElementById("password").value;
     const color = document.getElementById("color").value;
-    if(message.trim() === "") return;
-    ws.send(JSON.stringify({username, content: message, color}));
-    document.getElementById("message").value = "";
+
+    const res = await fetch("/login", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({username, password})
+    });
+    const data = await res.json();
+    if(res.ok) {
+        currentUser = {...data, color};
+        document.getElementById("login-container").style.display = "none";
+        document.getElementById("chat-container").style.display = "block";
+        startWebSocket();
+    } else {
+        alert(data.detail);
+    }
+}
+
+async function register() {
+    const username = document.getElementById("username").value;
+    const password = document.getElementById("password").value;
+    const res = await fetch("/register", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({username, password})
+    });
+    const data = await res.json();
+    if(res.ok) alert("Benutzer erstellt! Jetzt einloggen.");
+    else alert(data.detail);
+}
+
+function startWebSocket() {
+    ws = new WebSocket(`ws://${window.location.host}/ws`);
+
+    ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        const msgDiv = document.createElement("div");
+
+        let nameClass = "";
+        if(msg.username === "admin") nameClass = "admin";
+        else nameClass = usersOnline[msg.username] ? "online" : "offline";
+
+        msgDiv.innerHTML = `<span class="${nameClass}" style="color:${msg.color}">[${new Date(msg.timestamp).toLocaleTimeString()}] ${msg.username}:</span> ${msg.content}`;
+        document.getElementById("messages").appendChild(msgDiv);
+        msgDiv.scrollIntoView();
+    };
+
+    const input = document.getElementById("messageInput");
+    input.addEventListener("keydown", function(e){
+        if(e.key === "Enter" && input.value.trim()!=="") {
+            ws.send(JSON.stringify({username: currentUser.username, content: input.value, color: currentUser.color}));
+            input.value = "";
+        }
+    });
+}
+
+// Optional: Online-User-Liste (nur Demo, benötigt Backend-Erweiterung)
+function updateOnlineUsers() {
+    const container = document.getElementById("online-users");
+    container.innerHTML = "Online: " + Object.keys(usersOnline).join(", ");
 }
 </script>
+
 </body>
 </html>
