@@ -1,25 +1,31 @@
+# main.py
 import json
-import os
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from passlib.context import CryptContext
 from db import SessionLocal, Base, engine
 from models import User, Message
+from passlib.context import CryptContext
 from typing import List
+from datetime import datetime
 
-# ----------------------------
-# Datenbank-Setup
-# ----------------------------
+# -------------------- Setup --------------------
 Base.metadata.create_all(bind=engine)
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# ----------------------------
-# DB Session
-# ----------------------------
+# CORS für Frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# -------------------- DB-Sitzung --------------------
 def get_db():
     db = SessionLocal()
     try:
@@ -27,62 +33,7 @@ def get_db():
     finally:
         db.close()
 
-# ----------------------------
-# Admin erstellen (Render-safe)
-# ----------------------------
-def create_admin(db: Session):
-    admin = db.query(User).filter(User.username == "admin").first()
-    if not admin:
-        hashed = pwd_context.hash("AdminPass123!"[:72])  # bcrypt max 72 Bytes
-        admin = User(username="admin", password_hash=hashed, is_admin=1, color="#FF0000")
-        db.add(admin)
-        db.commit()
-        print("Admin-Benutzer erstellt: admin / AdminPass123!")
-
-db = SessionLocal()
-create_admin(db)
-db.close()
-
-# ----------------------------
-# Root
-# ----------------------------
-@app.get("/")
-async def root():
-    index_path = os.path.join("static", "index.html")
-    if os.path.exists(index_path):
-        return FileResponse(index_path)
-    return {"error": "index.html not found"}
-
-# ----------------------------
-# Register
-# ----------------------------
-@app.post("/register")
-async def register(username: str, password: str, db: Session = Depends(get_db)):
-    existing = db.query(User).filter(User.username == username).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Username already exists")
-    hashed = pwd_context.hash(password[:72])
-    user = User(username=username, password_hash=hashed)
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return {"message": "User created"}
-
-# ----------------------------
-# Login
-# ----------------------------
-@app.post("/login")
-async def login(username: str, password: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == username).first()
-    if not user or not pwd_context.verify(password[:72], user.password_hash):
-        raise HTTPException(status_code=400, detail="Invalid credentials")
-    user.online = 1
-    db.commit()
-    return {"message": "Login successful", "username": user.username, "color": user.color, "is_admin": user.is_admin}
-
-# ----------------------------
-# WebSocket Manager
-# ----------------------------
+# -------------------- WebSocket-Manager --------------------
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
@@ -95,30 +46,52 @@ class ConnectionManager:
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
 
-    async def broadcast(self, message: str):
+    async def broadcast(self, message: dict):
         for connection in list(self.active_connections):
             try:
-                await connection.send_text(message)
+                await connection.send_text(json.dumps(message))
             except:
                 self.disconnect(connection)
 
 manager = ConnectionManager()
 
-# ----------------------------
-# WebSocket Endpoint
-# ----------------------------
+# -------------------- Login/Register --------------------
+@app.post("/login")
+def login(user: dict, db: Session = Depends(get_db)):
+    username = user.get("username")
+    password = user.get("password")
+    db_user = db.query(User).filter(User.username == username).first()
+    if not db_user or not pwd_context.verify(password, db_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Benutzername oder Passwort falsch")
+    return {"username": db_user.username, "color": db_user.color, "is_admin": db_user.is_admin}
+
+@app.post("/register")
+def register(user: dict, db: Session = Depends(get_db)):
+    username = user.get("username")
+    password = user.get("password")
+    if db.query(User).filter(User.username == username).first():
+        raise HTTPException(status_code=400, detail="Benutzer existiert bereits")
+    hashed = pwd_context.hash(password[:72])  # Bcrypt Limit
+    new_user = User(username=username, hashed_password=hashed, color="#FFFFFF", is_admin=False)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return {"username": new_user.username, "color": new_user.color, "is_admin": new_user.is_admin}
+
+# -------------------- WebSocket --------------------
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)):
     await manager.connect(websocket)
     try:
-        # Letzte 50 Nachrichten
+        # Letzte 50 Nachrichten senden
         last_messages = db.query(Message).order_by(Message.timestamp.desc()).limit(50).all()
         for msg in reversed(last_messages):
             await websocket.send_text(json.dumps({
                 "username": msg.username,
                 "content": msg.content,
                 "timestamp": msg.timestamp.isoformat(),
-                "color": "#FFFFFF"  # default, später optional User-Farbe
+                "color": msg.color,
+                "is_admin": msg.is_admin
             }))
 
         # Nachrichten empfangen
@@ -131,18 +104,36 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
             if not content:
                 continue
 
-            new_msg = Message(username=username, content=content)
+            # Nachricht speichern
+            new_msg = Message(username=username, content=content, timestamp=datetime.utcnow(),
+                              color=color, is_admin=(username.lower()=="admin"))
             db.add(new_msg)
             db.commit()
             db.refresh(new_msg)
 
-            event = json.dumps({
+            # Nachricht an alle senden
+            event = {
                 "username": new_msg.username,
                 "content": new_msg.content,
                 "timestamp": new_msg.timestamp.isoformat(),
-                "color": color
-            })
+                "color": new_msg.color,
+                "is_admin": new_msg.is_admin
+            }
             await manager.broadcast(event)
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+
+# -------------------- Admin erstellen (optional) --------------------
+def create_admin(db: Session):
+    if not db.query(User).filter(User.username=="admin").first():
+        hashed = pwd_context.hash("AdminPass123!"[:72])
+        admin = User(username="admin", hashed_password=hashed, color="#ff5555", is_admin=True)
+        db.add(admin)
+        db.commit()
+        db.refresh(admin)
+
+# Admin beim Start erstellen
+for db in get_db():
+    create_admin(db)
+    break
