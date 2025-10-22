@@ -1,11 +1,12 @@
+
 # main.py
-from fastapi.responses import FileResponse
-import os
 import json
+import os
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from db import SessionLocal, engine, Base
+from db import SessionLocal, Base, engine
 from models import Message
 from typing import List
 
@@ -13,11 +14,17 @@ from typing import List
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
+
+# Statischer Ordner für CSS/JS/HTML
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Root-Endpunkt zeigt automatisch index.html
 @app.get("/")
 async def root():
-    return FileResponse(os.path.join("static", "index.html"))
-
+    index_path = os.path.join("static", "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"error": "index.html not found"}
 
 # WebSocket-Manager für alle Clients
 class ConnectionManager:
@@ -54,7 +61,7 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
     """Empfängt und sendet Chatnachrichten."""
     await manager.connect(websocket)
     try:
-        # Sende die letzten 50 Nachrichten an den neuen Client
+        # Letzte 50 Nachrichten an neuen Client senden
         last_messages = db.query(Message).order_by(Message.timestamp.desc()).limit(50).all()
         for msg in reversed(last_messages):
             await websocket.send_text(json.dumps({
@@ -88,4 +95,3 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)
-
