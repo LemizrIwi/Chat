@@ -1,4 +1,6 @@
 # main.py
+from fastapi.responses import FileResponse
+import os
 import json
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
 from fastapi.staticfiles import StaticFiles
@@ -12,6 +14,9 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
+@app.get("/")
+async def root():
+    return FileResponse(os.path.join("static", "index.html"))
 
 
 # WebSocket-Manager für alle Clients
@@ -83,3 +88,4 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+
