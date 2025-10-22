@@ -1,0 +1,26 @@
+body.dark {
+  background-color: #1e1e1e;
+  color: #f0f0f0;
+  font-family: sans-serif;
+}
+
+#chat-box {
+  border: 1px solid #555;
+  height: 400px;
+  overflow-y: scroll;
+  padding: 10px;
+  margin-bottom: 10px;
+  background-color: #2c2c2c;
+}
+
+.message {
+  margin: 5px 0;
+}
+
+.username {
+  font-weight: bold;
+}
+
+.admin {
+  color: #ff5555;
+}
