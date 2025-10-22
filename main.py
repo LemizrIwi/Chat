@@ -1,46 +1,78 @@
 # main.py
-import json
-from datetime import datetime
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy.orm import Session
-from db import SessionLocal, engine, Base
-from models import User, Message
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base, Session
 from passlib.context import CryptContext
-from typing import List
+from datetime import datetime
 
-# Passwort-Hashing
+# ------------------------------
+# Datenbank Setup
+# ------------------------------
+DATABASE_URL = "sqlite:///michat.db"
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+# ------------------------------
+# Password Hashing
+# ------------------------------
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# ------------------------------
+# Models
+# ------------------------------
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True, nullable=False)
+    password_hash = Column(String, nullable=False)
+    color = Column(String, default="#ffffff")
+    is_admin = Column(Boolean, default=False)
+
+class Message(Base):
+    __tablename__ = "messages"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, nullable=False)
+    content = Column(String, nullable=False)
+    timestamp = Column(DateTime, default=datetime.utcnow)
 
 # Tabellen erstellen
 Base.metadata.create_all(bind=engine)
 
+# ------------------------------
+# FastAPI App
+# ------------------------------
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# WebSocket-Manager
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: List[WebSocket] = []
+# ------------------------------
+# Pydantic Schemas
+# ------------------------------
+class UserCreate(BaseModel):
+    username: str
+    password: str
 
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.append(websocket)
+class UserLogin(BaseModel):
+    username: str
+    password: str
 
-    def disconnect(self, websocket: WebSocket):
-        if websocket in self.active_connections:
-            self.active_connections.remove(websocket)
+class MessageCreate(BaseModel):
+    username: str
+    content: str
 
-    async def broadcast(self, message: str):
-        for connection in list(self.active_connections):
-            try:
-                await connection.send_text(message)
-            except:
-                self.disconnect(connection)
-
-manager = ConnectionManager()
-
-# Datenbank-Sitzung
+# ------------------------------
+# Dependency
+# ------------------------------
 def get_db():
     db = SessionLocal()
     try:
@@ -48,78 +80,78 @@ def get_db():
     finally:
         db.close()
 
-# Admin erstellen, falls nicht vorhanden
+# ------------------------------
+# Admin User erstellen
+# ------------------------------
 def create_admin(db: Session):
     admin_user = db.query(User).filter(User.username == "admin").first()
     if not admin_user:
-        hashed = pwd_context.hash("AdminPass123!")[:72]  # Passwort max. 72 Bytes
+        hashed = pwd_context.hash("AdminPass123!"[:72])
         admin = User(username="admin", password_hash=hashed, color="#ff5555", is_admin=True)
         db.add(admin)
         db.commit()
-        print("Admin erstellt!")
+        print("Admin erstellt: admin / AdminPass123!")
 
-# Admin beim Start erstellen
-db = next(get_db())
-create_admin(db)
-
-# Registrierung
+# ------------------------------
+# Benutzer Register/Login
+# ------------------------------
 @app.post("/register")
-def register(username: str, password: str, db: Session = Depends(get_db)):
-    if db.query(User).filter(User.username == username).first():
-        raise HTTPException(status_code=400, detail="Benutzername existiert bereits")
-    hashed = pwd_context.hash(password)[:72]
-    user = User(username=username, password_hash=hashed, color="#FFFFFF", is_admin=False)
-    db.add(user)
+def register(user: UserCreate, db: Session = Depends(get_db)):
+    existing = db.query(User).filter(User.username == user.username).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Username already exists")
+    hashed = pwd_context.hash(user.password[:72])
+    new_user = User(username=user.username, password_hash=hashed)
+    db.add(new_user)
     db.commit()
-    db.refresh(user)
-    return {"message": "User registriert"}
+    return {"message": "User created"}
 
-# Login
 @app.post("/login")
-def login(username: str, password: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == username).first()
-    if not user or not pwd_context.verify(password, user.password_hash):
-        raise HTTPException(status_code=400, detail="Benutzername oder Passwort falsch")
-    return {"message": "Login erfolgreich", "username": user.username, "color": user.color}
+def login(user: UserLogin, db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.username == user.username).first()
+    if not db_user or not pwd_context.verify(user.password, db_user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    return {"message": "Login successful", "username": db_user.username, "color": db_user.color}
 
-# WebSocket-Endpoint
-@app.websocket("/ws")
+# ------------------------------
+# WebSocket Chat
+# ------------------------------
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: list[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: dict):
+        for connection in self.active_connections:
+            await connection.send_json(message)
+
+manager = ConnectionManager()
+
+@app.websocket("/ws/chat")
 async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)):
     await manager.connect(websocket)
     try:
-        # Letzte 50 Nachrichten an neuen Client
-        last_messages = db.query(Message).order_by(Message.timestamp.desc()).limit(50).all()
-        for msg in reversed(last_messages):
-            await websocket.send_text(json.dumps({
+        while True:
+            data = await websocket.receive_json()
+            msg = Message(username=data["username"], content=data["content"])
+            db.add(msg)
+            db.commit()
+            await manager.broadcast({
                 "username": msg.username,
                 "content": msg.content,
-                "timestamp": msg.timestamp.isoformat(),
-                "color": msg.color
-            }))
-
-        while True:
-            data = await websocket.receive_text()
-            payload = json.loads(data)
-            username = payload.get("username", "Anonymous")
-            content = payload.get("content", "").strip()
-            color = payload.get("color", "#FFFFFF")
-            if not content:
-                continue
-
-            # Nachricht speichern
-            new_msg = Message(username=username, content=content, color=color, timestamp=datetime.utcnow())
-            db.add(new_msg)
-            db.commit()
-            db.refresh(new_msg)
-
-            # Nachricht an alle senden
-            event = json.dumps({
-                "username": new_msg.username,
-                "content": new_msg.content,
-                "timestamp": new_msg.timestamp.isoformat(),
-                "color": new_msg.color
+                "timestamp": msg.timestamp.isoformat()
             })
-            await manager.broadcast(event)
-
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+
+# ------------------------------
+# Admin erstellen beim Start
+# ------------------------------
+with SessionLocal() as db:
+    create_admin(db)
