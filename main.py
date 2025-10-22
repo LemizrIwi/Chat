@@ -1,78 +1,47 @@
-# main.py
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base, Session
+from fastapi.responses import FileResponse
+from sqlalchemy import Column, Integer, String, Boolean, create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from passlib.context import CryptContext
+import os
 from datetime import datetime
 
-# ------------------------------
-# Datenbank Setup
-# ------------------------------
-DATABASE_URL = "sqlite:///michat.db"
+# --- FastAPI App ---
+app = FastAPI()
+
+# Statische Dateien bereitstellen
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# --- Datenbank Setup ---
+DATABASE_URL = "sqlite:///./michat.db"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 Base = declarative_base()
 
-# ------------------------------
-# Password Hashing
-# ------------------------------
+# --- Password-Hashing ---
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# ------------------------------
-# Models
-# ------------------------------
+# --- Models ---
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True, index=True, nullable=False)
-    password_hash = Column(String, nullable=False)
-    color = Column(String, default="#ffffff")
+    username = Column(String, unique=True, index=True)
+    password_hash = Column(String)
+    color = Column(String, default="#000000")
     is_admin = Column(Boolean, default=False)
 
 class Message(Base):
     __tablename__ = "messages"
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, nullable=False)
-    content = Column(String, nullable=False)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    username = Column(String)
+    content = Column(String)
+    timestamp = Column(String)
 
-# Tabellen erstellen
+# --- Tabellen erstellen ---
 Base.metadata.create_all(bind=engine)
 
-# ------------------------------
-# FastAPI App
-# ------------------------------
-app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# ------------------------------
-# Pydantic Schemas
-# ------------------------------
-class UserCreate(BaseModel):
-    username: str
-    password: str
-
-class UserLogin(BaseModel):
-    username: str
-    password: str
-
-class MessageCreate(BaseModel):
-    username: str
-    content: str
-
-# ------------------------------
-# Dependency
-# ------------------------------
+# --- Dependency ---
 def get_db():
     db = SessionLocal()
     try:
@@ -80,78 +49,55 @@ def get_db():
     finally:
         db.close()
 
-# ------------------------------
-# Admin User erstellen
-# ------------------------------
+# --- Admin erstellen ---
 def create_admin(db: Session):
     admin_user = db.query(User).filter(User.username == "admin").first()
     if not admin_user:
-        hashed = pwd_context.hash("AdminPass123!"[:72])
+        hashed = pwd_context.hash("AdminPass123!")  # Admin-Passwort
         admin = User(username="admin", password_hash=hashed, color="#ff5555", is_admin=True)
         db.add(admin)
         db.commit()
-        print("Admin erstellt: admin / AdminPass123!")
 
-# ------------------------------
-# Benutzer Register/Login
-# ------------------------------
-@app.post("/register")
-def register(user: UserCreate, db: Session = Depends(get_db)):
-    existing = db.query(User).filter(User.username == user.username).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Username already exists")
-    hashed = pwd_context.hash(user.password[:72])
-    new_user = User(username=user.username, password_hash=hashed)
-    db.add(new_user)
-    db.commit()
-    return {"message": "User created"}
-
-@app.post("/login")
-def login(user: UserLogin, db: Session = Depends(get_db)):
-    db_user = db.query(User).filter(User.username == user.username).first()
-    if not db_user or not pwd_context.verify(user.password, db_user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    return {"message": "Login successful", "username": db_user.username, "color": db_user.color}
-
-# ------------------------------
-# WebSocket Chat
-# ------------------------------
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: list[WebSocket] = []
-
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.append(websocket)
-
-    def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
-
-    async def broadcast(self, message: dict):
-        for connection in self.active_connections:
-            await connection.send_json(message)
-
-manager = ConnectionManager()
-
-@app.websocket("/ws/chat")
-async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)):
-    await manager.connect(websocket)
-    try:
-        while True:
-            data = await websocket.receive_json()
-            msg = Message(username=data["username"], content=data["content"])
-            db.add(msg)
-            db.commit()
-            await manager.broadcast({
-                "username": msg.username,
-                "content": msg.content,
-                "timestamp": msg.timestamp.isoformat()
-            })
-    except WebSocketDisconnect:
-        manager.disconnect(websocket)
-
-# ------------------------------
-# Admin erstellen beim Start
-# ------------------------------
+# Admin beim Start erstellen
 with SessionLocal() as db:
     create_admin(db)
+
+# --- Routes ---
+@app.get("/")
+def root():
+    return FileResponse(os.path.join("static", "index.html"))
+
+@app.post("/register")
+def register(username: str, password: str, db: Session = Depends(get_db)):
+    existing_user = db.query(User).filter(User.username == username).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Username already exists")
+    hashed = pwd_context.hash(password)
+    user = User(username=username, password_hash=hashed)
+    db.add(user)
+    db.commit()
+    return {"message": "User registered successfully"}
+
+@app.post("/login")
+def login(username: str, password: str, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == username).first()
+    if not user or not pwd_context.verify(password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    return {
+        "message": "Login successful",
+        "username": user.username,
+        "color": user.color,
+        "is_admin": user.is_admin
+    }
+
+@app.get("/messages")
+def get_messages(db: Session = Depends(get_db)):
+    return db.query(Message).all()
+
+@app.post("/messages")
+def post_message(username: str, content: str, db: Session = Depends(get_db)):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    msg = Message(username=username, content=content, timestamp=timestamp)
+    db.add(msg)
+    db.commit()
+    return {"message": "Message sent"}
