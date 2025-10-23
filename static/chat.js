@@ -1,94 +1,98 @@
-let ws;
-let username = null;
-let color = "#ffffff";
+document.addEventListener("DOMContentLoaded", () => {
+    const loginContainer = document.getElementById("login-container");
+    const chatContainer = document.getElementById("chat-container");
+    const chatBox = document.getElementById("chat-box");
+    const messageBox = document.getElementById("chat-input");
+    const sendButton = document.getElementById("send-btn");
+    const loginButton = document.getElementById("login-btn");
+    const registerButton = document.getElementById("register-btn");
+    const usernameInput = document.getElementById("username");
+    const passwordInput = document.getElementById("password");
+    const messageElement = document.getElementById("message");
+    const colorPicker = document.getElementById("color-picker");
 
-document.getElementById("login-btn").onclick = () => auth("/login");
-document.getElementById("register-btn").onclick = () => auth("/register");
+    let username = null;
+    let userColor = "#ffffff";
 
-document.getElementById("chat-input").addEventListener("keypress", (e) => {
-    if (e.key === "Enter") sendMessage();
-});
-
-document.getElementById("color-picker").addEventListener("input", (e) => {
-    color = e.target.value;
-});
-
-async function auth(route) {
-    const usernameInput = document.getElementById("username").value.trim();
-    const passwordInput = document.getElementById("password").value;
-    const messageEl = document.getElementById("message");
-
-    if (!usernameInput || !passwordInput) {
-        messageEl.innerText = "Bitte Benutzername und Passwort eingeben.";
-        return;
-    }
-
-    try {
-        const res = await fetch(route, {
+    // --- Login ---
+    loginButton.addEventListener("click", async () => {
+        const response = await fetch("/login", {
             method: "POST",
-            body: new URLSearchParams({ username: usernameInput, password: passwordInput }),
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                username: usernameInput.value,
+                password: passwordInput.value,
+            }),
         });
-        const data = await res.json();
 
-        if (!data.success) {
-            messageEl.innerText = data.message || "Fehler beim Login/Registrieren.";
-            return;
+        const data = await response.json();
+        if (response.ok) {
+            username = usernameInput.value;
+            loginContainer.style.display = "none";
+            chatContainer.style.display = "block";
+            loadMessages();
+        } else {
+            messageElement.textContent = data.detail || "Fehler beim Login.";
         }
+    });
 
-        username = usernameInput;
-        color = data.color || "#ffffff";
+    // --- Registrierung ---
+    registerButton.addEventListener("click", async () => {
+        const response = await fetch("/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                username: usernameInput.value,
+                password: passwordInput.value,
+            }),
+        });
 
-        document.getElementById("login-container").style.display = "none";
-        document.getElementById("chat-container").style.display = "block";
+        const data = await response.json();
+        if (response.ok) {
+            messageElement.textContent = "✅ Registrierung erfolgreich. Jetzt einloggen!";
+        } else {
+            messageElement.textContent = data.detail || "Fehler bei der Registrierung.";
+        }
+    });
 
-        startWebSocket();
-        loadMessages();
+    // --- Nachrichten senden ---
+    sendButton.addEventListener("click", async () => {
+        const message = messageBox.value.trim();
+        if (!message) return;
 
-    } catch (err) {
-        messageEl.innerText = "Verbindungsfehler: " + err.message;
+        const response = await fetch("/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                username: username,
+                color: colorPicker.value,
+                message: message,
+            }),
+        });
+
+        if (response.ok) {
+            messageBox.value = "";
+            loadMessages(); // sofort neu laden
+        }
+    });
+
+    // --- Nachrichten laden ---
+    async function loadMessages() {
+        const response = await fetch("/messages");
+        const data = await response.json();
+
+        chatBox.innerHTML = ""; // vorher leeren
+        data.forEach(msg => {
+            const msgEl = document.createElement("div");
+            msgEl.classList.add("message");
+            msgEl.innerHTML = `<strong style="color:${msg.color}">${msg.username}</strong>: ${msg.message}`;
+            chatBox.appendChild(msgEl);
+        });
+
+        // Scroll automatisch nach unten
+        chatBox.scrollTop = chatBox.scrollHeight;
     }
-}
 
-async function loadMessages() {
-    const res = await fetch("/messages");
-    const messages = await res.json();
-    const box = document.getElementById("chat-box");
-    box.innerHTML = "";
-    messages.forEach(addMessage);
-}
-
-function startWebSocket() {
-    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-    ws = new WebSocket(`${protocol}://${window.location.host}/ws`);
-    ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        addMessage(msg);
-    };
-    ws.onclose = () => console.log("🔌 Verbindung getrennt");
-}
-
-function sendMessage() {
-    const input = document.getElementById("chat-input");
-    const content = input.value.trim();
-    if (!content || !ws) return;
-    ws.send(JSON.stringify({ username, content, color }));
-    input.value = "";
-}
-
-function addMessage(msg) {
-    const box = document.getElementById("chat-box");
-    const div = document.createElement("div");
-    div.classList.add("message");
-
-    const nameSpan = document.createElement("span");
-    nameSpan.classList.add("username");
-    nameSpan.style.color = msg.color || "#ffffff";
-    nameSpan.innerText = msg.username;
-
-    const time = msg.timestamp || new Date().toLocaleTimeString();
-
-    div.appendChild(nameSpan);
-    div.append(` [${time}]: ${msg.content}`);
-    box.appendChild(div);
-    box.scrollTop = box.scrollHeight;
-}
+    // Alle 2 Sekunden neu laden
+    setInterval(loadMessages, 2000);
+});
