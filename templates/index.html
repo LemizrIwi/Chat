@@ -1,53 +1,46 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="de">
 <head>
-  <meta charset="utf-8" />
-  <title>Python Chat</title>
-  <style>
-    body { font-family: sans-serif; max-width: 700px; margin: 20px auto; }
-    #messages { border: 1px solid #ccc; height: 400px; overflow-y: auto; padding: 10px; }
-    .msg { margin-bottom: 8px; }
-    .username { font-weight: bold; margin-right: 5px; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MiChat 💬</title>
+    <style>
+        body { background-color: #121212; color: white; font-family: Arial; margin: 0; }
+        #login-container, #chat-container {
+            width: 90%; max-width: 500px; margin: 80px auto; background: #1e1e1e;
+            padding: 25px; border-radius: 12px; box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        input, button { width: 100%; margin-top: 10px; padding: 10px; border: none; border-radius: 8px; }
+        input { background: #2a2a2a; color: white; }
+        button { background: #3a82f7; color: white; font-weight: bold; cursor: pointer; }
+        button:hover { background: #2963c8; }
+        #chat-box { background: #181818; border: 1px solid #333; height: 350px; overflow-y: auto; border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+        .message { background: #2b2b2b; border-radius: 6px; margin: 5px 0; padding: 6px; }
+        .username { font-weight: bold; }
+        .admin { color: #ff4081 !important; }
+        #message { color: #ff5b5b; text-align: center; margin-top: 10px; }
+    </style>
 </head>
 <body>
-  <h2>Python Chat</h2>
-  <input id="username" placeholder="Name" />
-  <div id="messages"></div>
-  <input id="text" placeholder="Nachricht..." />
-  <button id="send">Senden</button>
+    <div id="login-container">
+        <h2>Willkommen bei MiChat 💬</h2>
+        <input type="text" id="username" placeholder="Benutzername">
+        <input type="password" id="password" placeholder="Passwort">
+        <input type="color" id="color-picker" value="#ffffff">
+        <button id="login-btn">Login</button>
+        <button id="register-btn">Registrieren</button>
+        <p id="message"></p>
+    </div>
 
-<script>
-  const usernameInput = document.getElementById('username');
-  const textInput = document.getElementById('text');
-  const sendButton = document.getElementById('send');
-  const messagesDiv = document.getElementById('messages');
+    <div id="chat-container" style="display:none;">
+        <h2>MiChat Raum 💭</h2>
+        <div id="chat-box"></div>
+        <div style="display:flex;">
+            <input type="text" id="chat-input" placeholder="Nachricht...">
+            <button id="send-btn">Senden</button>
+        </div>
+    </div>
 
-  const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = wsProtocol + '//' + location.host + '/ws';
-  const ws = new WebSocket(wsUrl);
-
-  ws.onmessage = (event) => {
-    const msg = JSON.parse(event.data);
-    const div = document.createElement('div');
-    div.classList.add('msg');
-    div.innerHTML = `<span class="username">${msg.username}</span>: ${msg.content}`;
-    messagesDiv.appendChild(div);
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-  };
-
-  sendButton.onclick = () => {
-    const username = usernameInput.value.trim() || 'Anonymous';
-    const content = textInput.value.trim();
-    if (content) {
-      ws.send(JSON.stringify({ username, content }));
-      textInput.value = '';
-    }
-  };
-
-  textInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter') sendButton.click();
-  });
-</script>
+    <script src="/static/main.js"></script>
 </body>
 </html>
