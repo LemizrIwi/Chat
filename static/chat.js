@@ -12,7 +12,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const colorPicker = document.getElementById("color-picker");
 
     let username = null;
-    let userColor = "#ffffff";
 
     // --- Login ---
     loginButton.addEventListener("click", async () => {
@@ -29,7 +28,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (response.ok) {
             username = usernameInput.value;
             loginContainer.style.display = "none";
-            chatContainer.style.display = "block";
+            chatContainer.style.display = "flex";
             loadMessages();
         } else {
             messageElement.textContent = data.detail || "Fehler beim Login.";
@@ -55,7 +54,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // --- Nachrichten senden ---
+    // --- Nachricht senden ---
     sendButton.addEventListener("click", async () => {
         const message = messageBox.value.trim();
         if (!message) return;
@@ -72,7 +71,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (response.ok) {
             messageBox.value = "";
-            loadMessages(); // sofort neu laden
+            loadMessages(); // sofort aktualisieren
         }
     });
 
@@ -81,7 +80,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const response = await fetch("/messages");
         const data = await response.json();
 
-        chatBox.innerHTML = ""; // vorher leeren
+        chatBox.innerHTML = "";
         data.forEach(msg => {
             const msgEl = document.createElement("div");
             msgEl.classList.add("message");
@@ -89,10 +88,8 @@ document.addEventListener("DOMContentLoaded", () => {
             chatBox.appendChild(msgEl);
         });
 
-        // Scroll automatisch nach unten
         chatBox.scrollTop = chatBox.scrollHeight;
     }
 
-    // Alle 2 Sekunden neu laden
     setInterval(loadMessages, 2000);
 });
