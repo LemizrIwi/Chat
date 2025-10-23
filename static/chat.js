@@ -1,9 +1,12 @@
 document.addEventListener("DOMContentLoaded", () => {
+    console.log("MiChat gestartet ✅");
+
+    // Elemente holen
     const loginContainer = document.getElementById("login-container");
     const chatContainer = document.getElementById("chat-container");
     const loginBtn = document.getElementById("login-btn");
     const registerBtn = document.getElementById("register-btn");
-    const messageBox = document.getElementById("message-box");
+    const messageBox = document.getElementById("chat-input");
     const sendButton = document.getElementById("send-btn");
     const colorPicker = document.getElementById("color-picker");
     const usernameInput = document.getElementById("username");
@@ -42,7 +45,7 @@ document.addEventListener("DOMContentLoaded", () => {
             let data;
             try {
                 data = await response.json();
-            } catch (e) {
+            } catch {
                 data = { detail: "Fehlerhafte Serverantwort." };
             }
 
@@ -91,31 +94,37 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // --- Nachricht senden (auch mit Enter) ---
+    // --- Nachricht senden ---
     async function sendMessage() {
         const message = messageBox.value.trim();
         if (!message) return;
 
-        const response = await fetch("/send", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                username: username,
-                color: colorPicker.value,
-                message: message,
-            }),
-        });
+        try {
+            const response = await fetch("/send", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    username: username,
+                    color: colorPicker.value,
+                    message: message
+                })
+            });
 
-        if (response.ok) {
-            messageBox.value = "";
-            loadMessages();
+            if (response.ok) {
+                messageBox.value = "";
+                await loadMessages();
+            } else {
+                console.error("Fehler beim Senden:", await response.text());
+            }
+        } catch (error) {
+            console.error("Fehler beim Senden:", error);
         }
     }
 
-    // Klick auf Button
+    // --- Button klick ---
     sendButton.addEventListener("click", sendMessage);
 
-    // Enter-Taste drücken (Shift + Enter = Zeilenumbruch)
+    // --- Enter drücken ---
     messageBox.addEventListener("keydown", (event) => {
         if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
@@ -123,6 +132,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // --- Chat automatisch aktualisieren ---
+    // --- Automatisches Nachladen alle 3 Sekunden ---
     setInterval(loadMessages, 3000);
 });
