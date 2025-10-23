@@ -1,30 +1,46 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-    <meta charset="UTF-8">
-    <title>MiChat 💬</title>
-    <link rel="stylesheet" href="/static/style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MiChat 💬</title>
+  <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-    <div id="login-container">
-        <h2>🔐 Login / Registrierung</h2>
-        <input id="username" type="text" placeholder="Benutzername">
-        <input id="password" type="password" placeholder="Passwort">
-        <br>
-        <button id="login-btn">Login</button>
-        <button id="register-btn">Registrieren</button>
-        <p id="message" style="color: red;"></p>
-    </div>
 
-    <div id="chat-container" style="display:none;">
-        <div id="chat-box"></div>
-        <div id="chat-controls">
-            <input id="color-picker" type="color" value="#ffffff">
-            <input id="chat-input" type="text" placeholder="Nachricht eingeben...">
-            <button id="send-btn">Senden</button>
-        </div>
+  <!-- Login / Registrierung -->
+  <div id="login-container">
+    <h2>🔐 Login / Registrierung</h2>
+    <input id="username" type="text" placeholder="Benutzername" autocomplete="username" />
+    <input id="password" type="password" placeholder="Passwort" autocomplete="current-password" />
+    <div style="margin-top: .5rem;">
+      <button id="login-btn">Login</button>
+      <button id="register-btn">Registrieren</button>
     </div>
+    <p id="message" style="color:#ff6b6b;min-height:1.2rem;margin:.5rem 0 0;"></p>
+  </div>
 
-    <script src="/static/chat.js"></script>
+  <!-- Chat -->
+  <div id="chat-container" style="display:none;">
+    <div id="chat-box"></div>
+
+    <div id="chat-controls">
+      <!-- Namensfarbe wählen -->
+      <input id="color-picker" type="color" value="#ffffff" title="Farbe für deinen Namen" />
+
+      <!-- Nachricht (textarea, damit Enter abgefangen werden kann) -->
+      <textarea
+        id="chat-input"
+        placeholder="Nachricht eingeben… (Enter = senden, Shift+Enter = Zeilenumbruch)"
+        rows="2"
+      ></textarea>
+
+      <!-- Senden -->
+      <button id="send-btn" title="Senden">Senden</button>
+    </div>
+  </div>
+
+  <!-- WICHTIG: Script NACH den DOM-Elementen laden -->
+  <script src="/static/chat.js"></script>
 </body>
 </html>
