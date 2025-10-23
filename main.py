@@ -1,118 +1,111 @@
-from fastapi import FastAPI, WebSocket, Request, Form, Depends
-from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, WebSocket, Form, HTTPException, Depends
+from fastapi.responses import HTMLResponse
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from passlib.context import CryptContext
-from datetime import datetime
+from sqlalchemy.orm import declarative_base, sessionmaker
+from passlib.hash import bcrypt
+from dotenv import load_dotenv
+import os
+import datetime
 import json
 
-app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# Load .env
+load_dotenv()
+DB_URL = os.getenv("DATABASE_URL", "sqlite:///./chat.db")
+SECRET_KEY = os.getenv("SECRET_KEY", "secret")
 
-# Datenbank
-DATABASE_URL = "sqlite:///./chat.db"
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+# DB Setup
+engine = create_engine(DB_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# Models
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
     password_hash = Column(String)
-    color = Column(String, default="#000000")
+    color = Column(String, default="#ffffff")
     is_admin = Column(Boolean, default=False)
 
 class Message(Base):
     __tablename__ = "messages"
     id = Column(Integer, primary_key=True, index=True)
-    sender = Column(String)
-    color = Column(String)
+    username = Column(String)
     content = Column(String)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    color = Column(String)
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+    is_admin = Column(Boolean, default=False)
 
 Base.metadata.create_all(bind=engine)
 
-# Admin automatisch anlegen
-def create_admin():
+# FastAPI App
+app = FastAPI()
+clients = []
+
+# Helper functions
+def get_db():
     db = SessionLocal()
-    admin = db.query(User).filter(User.username == "admin").first()
-    if not admin:
-        hashed = pwd_context.hash("AdminPass123!"[:72])
-        admin_user = User(username="admin", password_hash=hashed, color="#ff5555", is_admin=True)
-        db.add(admin_user)
+    try:
+        yield db
+    finally:
+        db.close()
+
+def create_admin(db):
+    admin_user = db.query(User).filter(User.username=="admin").first()
+    if not admin_user:
+        hashed = bcrypt.hash("admin")
+        admin = User(username="admin", password_hash=hashed, color="#ff5555", is_admin=True)
+        db.add(admin)
         db.commit()
-    db.close()
 
-create_admin()
+# Initialize admin
+db = next(get_db())
+create_admin(db)
 
-# WebSocket Connections
-connections = []
+# Serve HTML
+@app.get("/")
+async def get():
+    with open("index.html", "r") as f:
+        return HTMLResponse(f.read())
 
+# Auth routes
+@app.post("/login")
+async def login(username: str = Form(...), password: str = Form(...), db=Depends(get_db)):
+    user = db.query(User).filter(User.username==username).first()
+    if not user or not bcrypt.verify(password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Invalid credentials")
+    return {"username": user.username, "color": user.color, "is_admin": user.is_admin}
+
+@app.post("/register")
+async def register(username: str = Form(...), password: str = Form(...), db=Depends(get_db)):
+    if db.query(User).filter(User.username==username).first():
+        raise HTTPException(status_code=400, detail="Username taken")
+    hashed = bcrypt.hash(password)
+    user = User(username=username, password_hash=hashed)
+    db.add(user)
+    db.commit()
+    return {"username": user.username, "color": user.color, "is_admin": user.is_admin}
+
+# WebSocket
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    connections.append(websocket)
+    clients.append(websocket)
     try:
         while True:
             data = await websocket.receive_text()
-            data_json = json.loads(data)
-            content = data_json.get("content")
-            sender = data_json.get("sender")
-            color = data_json.get("color")
-            timestamp = datetime.utcnow().strftime("%H:%M:%S")
-
-            # Nachricht speichern
-            db = SessionLocal()
-            msg = Message(sender=sender, color=color, content=content, timestamp=datetime.utcnow())
-            db.add(msg)
+            msg = json.loads(data)
+            msg["timestamp"] = datetime.datetime.utcnow().isoformat()
+            db = next(get_db())
+            db_msg = Message(
+                username=msg["username"],
+                content=msg["content"],
+                color=msg["color"],
+                is_admin=msg.get("is_admin", False)
+            )
+            db.add(db_msg)
             db.commit()
-            db.close()
-
-            # Nachricht an alle senden
-            for conn in connections:
-                await conn.send_text(json.dumps({
-                    "sender": sender,
-                    "color": color,
-                    "content": content,
-                    "timestamp": timestamp
-                }))
+            # Broadcast to all clients
+            for client in clients:
+                await client.send_text(json.dumps(msg))
     except:
-        connections.remove(websocket)
-
-# Login
-@app.post("/login")
-async def login(username: str = Form(...), password: str = Form(...)):
-    db = SessionLocal()
-    user = db.query(User).filter(User.username == username).first()
-    db.close()
-    if not user or not pwd_context.verify(password, user.password_hash):
-        return JSONResponse({"success": False, "error": "Falscher Benutzername oder Passwort"})
-    return {"success": True, "username": user.username, "color": user.color, "is_admin": user.is_admin}
-
-# Register
-@app.post("/register")
-async def register(username: str = Form(...), password: str = Form(...), color: str = Form("#000000")):
-    db = SessionLocal()
-    existing = db.query(User).filter(User.username == username).first()
-    if existing:
-        db.close()
-        return JSONResponse({"success": False, "error": "Benutzername existiert bereits"})
-    hashed = pwd_context.hash(password[:72])
-    user = User(username=username, password_hash=hashed, color=color)
-    db.add(user)
-    db.commit()
-    db.close()
-    return {"success": True, "username": username, "color": color}
-
-# Index
-@app.get("/", response_class=HTMLResponse)
-async def get():
-    with open("static/index.html", "r", encoding="utf-8") as f:
-        return f.read()
+        clients.remove(websocket)
