@@ -2,32 +2,143 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <title>MiChat</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatApp</title>
+    <style>
+        body {
+            background-color: #121212;
+            color: #ffffff;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+
+        #login-container, #chat-container {
+            width: 90%;
+            max-width: 500px;
+            margin: 60px auto;
+            background: #1e1e1e;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        h2 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+            border: none;
+            border-radius: 8px;
+            background-color: #2b2b2b;
+            color: white;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            margin-top: 10px;
+            border: none;
+            background-color: #3a82f7;
+            color: white;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        button:hover {
+            background-color: #2963c8;
+        }
+
+        #chat-box {
+            width: 100%;
+            height: 300px;
+            overflow-y: auto;
+            background-color: #181818;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #333;
+        }
+
+        .message {
+            margin: 5px 0;
+            padding: 5px;
+            border-radius: 4px;
+            background: #2b2b2b;
+        }
+
+        .username {
+            font-weight: bold;
+        }
+
+        .admin {
+            color: #ff4081 !important;
+        }
+
+        #chat-input {
+            width: calc(100% - 70px);
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            background-color: #2b2b2b;
+            color: white;
+        }
+
+        #send-btn {
+            width: 60px;
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            margin-left: 5px;
+            background-color: #3a82f7;
+            cursor: pointer;
+        }
+
+        #send-btn:hover {
+            background-color: #2963c8;
+        }
+
+        #color-picker {
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        #message {
+            color: #ff4d4d;
+            text-align: center;
+            margin-top: 10px;
+        }
+    </style>
 </head>
 <body>
-<div id="login-register">
-    <h2>Login</h2>
-    <input type="text" id="login-username" placeholder="Username">
-    <input type="password" id="login-password" placeholder="Passwort">
-    <button onclick="login()">Login</button>
+    <!-- LOGIN -->
+    <div id="login-container">
+        <h2>Willkommen 👋</h2>
+        <input type="text" id="username" placeholder="Benutzername">
+        <input type="password" id="password" placeholder="Passwort">
+        <input type="color" id="color-picker" value="#ffffff">
+        <button id="login-btn">Login</button>
+        <button id="register-btn">Registrieren</button>
+        <p id="message"></p>
+    </div>
 
-    <h2>Register</h2>
-    <input type="text" id="register-username" placeholder="Username">
-    <input type="password" id="register-password" placeholder="Passwort">
-    <input type="color" id="register-color" value="#000000">
-    <button onclick="register()">Register</button>
+    <!-- CHAT -->
+    <div id="chat-container" style="display: none;">
+        <h2>Chatraum 💬</h2>
+        <div id="chat-box"></div>
+        <div style="display: flex;">
+            <input type="text" id="chat-input" placeholder="Nachricht eingeben...">
+            <button id="send-btn">Senden</button>
+        </div>
+    </div>
 
-    <p id="error"></p>
-</div>
-
-<div id="chat" style="display:none;">
-    <h2>MiChat</h2>
-    <div id="messages"></div>
-    <input type="text" id="msg-input" placeholder="Nachricht" onkeypress="if(event.key==='Enter'){sendMessage();}">
-    <button onclick="sendMessage()">Senden</button>
-</div>
-
-<script src="/static/main.js"></script>
+    <!-- Skript -->
+    <script src="/static/main.js"></script>
 </body>
 </html>
