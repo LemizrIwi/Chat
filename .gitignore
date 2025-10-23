@@ -1,0 +1,27 @@
+# Virtuelle Umgebungen
+.venv/
+env/
+venv/
+
+# Cache & temporäre Dateien
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE & System-Dateien
+.vscode/
+.DS_Store
+
+# dotenv
+.env
+
+# Log-Dateien und SQLite Backups
+*.log
+*.sqlite3
+
+# Diese sollen NICHT ignoriert werden – also immer mit hochladen
+!templates/
+!static/
+!*.html
+!*.js
+!*.css
