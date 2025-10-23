@@ -2,25 +2,17 @@ let ws;
 let username;
 let color = "#ffffff";
 
-// Elemente
-const loginContainer = document.getElementById("login-container");
-const chatContainer = document.getElementById("chat-container");
-const chatBox = document.getElementById("chat-box");
-const chatInput = document.getElementById("chat-input");
-const messageEl = document.getElementById("message");
-const colorPicker = document.getElementById("color-picker");
-
 // Login/Register Buttons
-document.getElementById("login-btn").onclick = () => auth("/login");
-document.getElementById("register-btn").onclick = () => auth("/register");
+document.getElementById("login-btn").onclick = async () => auth("/login");
+document.getElementById("register-btn").onclick = async () => auth("/register");
 
 // Enter-to-send
-chatInput.addEventListener("keypress", e => {
+document.getElementById("chat-input").addEventListener("keypress", e => {
     if (e.key === "Enter") sendMessage();
 });
 
 // Farbwahl
-colorPicker.addEventListener("input", e => {
+document.getElementById("color-picker").addEventListener("input", e => {
     color = e.target.value;
 });
 
@@ -28,26 +20,19 @@ colorPicker.addEventListener("input", e => {
 async function auth(route) {
     username = document.getElementById("username").value.trim();
     const password = document.getElementById("password").value;
-
-    if (!username || !password) {
-        messageEl.innerText = "Bitte Username und Passwort eingeben!";
-        return;
-    }
+    const messageEl = document.getElementById("message");
 
     try {
         const res = await fetch(route, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ username, password })
+            body: new URLSearchParams({username, password})
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "Fehler beim Login/Register");
-
+        if (!res.ok) throw new Error(data.detail);
         // Erfolgreich
-        loginContainer.style.display = "none";
-        chatContainer.style.display = "block";
-        color = data.color || "#ffffff";
-
+        document.getElementById("login-container").style.display = "none";
+        document.getElementById("chat-container").style.display = "block";
+        color = data.color;
         startWebSocket();
     } catch (err) {
         messageEl.innerText = err.message;
@@ -57,45 +42,37 @@ async function auth(route) {
 // WebSocket starten
 function startWebSocket() {
     ws = new WebSocket(`ws://${window.location.host}/ws`);
-
-    ws.onopen = () => console.log("WebSocket verbunden.");
-    ws.onmessage = event => {
+    ws.onmessage = (event) => {
         const msg = JSON.parse(event.data);
         addMessage(msg);
     };
-    ws.onclose = () => console.log("WebSocket getrennt.");
 }
 
 // Nachricht senden
 document.getElementById("send-btn").onclick = sendMessage;
 function sendMessage() {
-    const content = chatInput.value.trim();
-    if (!content || !ws || ws.readyState !== WebSocket.OPEN) return;
-
-    ws.send(JSON.stringify({
-        username,
-        content,
-        color
-    }));
-
-    chatInput.value = "";
+    const input = document.getElementById("chat-input");
+    const content = input.value.trim();
+    if (!content) return;
+    ws.send(JSON.stringify({ username, content, color }));
+    input.value = "";
 }
 
 // Nachricht ins Chatfenster
 function addMessage(msg) {
+    const box = document.getElementById("chat-box");
     const div = document.createElement("div");
     div.classList.add("message");
 
-    const time = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
-    
+    const time = new Date(msg.timestamp).toLocaleTimeString();
     const usernameSpan = document.createElement("span");
     usernameSpan.classList.add("username");
     if (msg.is_admin) usernameSpan.classList.add("admin");
-    usernameSpan.style.color = msg.color || "#ffffff";
+    usernameSpan.style.color = msg.color;
     usernameSpan.innerText = msg.username;
 
     div.appendChild(usernameSpan);
     div.append(` [${time}]: ${msg.content}`);
-    chatBox.appendChild(div);
-    chatBox.scrollTop = chatBox.scrollHeight;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
 }
