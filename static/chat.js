@@ -54,8 +54,8 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // --- Nachricht senden ---
-    sendButton.addEventListener("click", async () => {
+       // --- Nachricht senden (auch mit Enter) ---
+    async function sendMessage() {
         const message = messageBox.value.trim();
         if (!message) return;
 
@@ -68,6 +68,24 @@ document.addEventListener("DOMContentLoaded", () => {
                 message: message,
             }),
         });
+
+        if (response.ok) {
+            messageBox.value = "";
+            loadMessages();
+        }
+    }
+
+    // Klick auf Button
+    sendButton.addEventListener("click", sendMessage);
+
+    // Enter-Taste drücken
+    messageBox.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+            event.preventDefault(); // verhindert Zeilenumbruch
+            sendMessage();
+        }
+    });
+
 
         if (response.ok) {
             messageBox.value = "";
