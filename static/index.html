@@ -3,123 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ChatApp</title>
+    <title>MiChat 💬</title>
     <style>
-        body {
-            background-color: #121212;
-            color: #ffffff;
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-        }
-
+        body { background-color: #121212; color: white; font-family: Arial; margin: 0; }
         #login-container, #chat-container {
-            width: 90%;
-            max-width: 500px;
-            margin: 60px auto;
-            background: #1e1e1e;
-            padding: 25px;
-            border-radius: 12px;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            width: 90%; max-width: 500px; margin: 80px auto; background: #1e1e1e;
+            padding: 25px; border-radius: 12px; box-shadow: 0 0 20px rgba(0,0,0,0.5);
         }
-
-        h2 {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-
-        input[type="text"], input[type="password"] {
-            width: 100%;
-            padding: 10px;
-            margin: 8px 0;
-            border: none;
-            border-radius: 8px;
-            background-color: #2b2b2b;
-            color: white;
-        }
-
-        button {
-            width: 100%;
-            padding: 10px;
-            margin-top: 10px;
-            border: none;
-            background-color: #3a82f7;
-            color: white;
-            font-weight: bold;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: 0.3s;
-        }
-
-        button:hover {
-            background-color: #2963c8;
-        }
-
-        #chat-box {
-            width: 100%;
-            height: 300px;
-            overflow-y: auto;
-            background-color: #181818;
-            border-radius: 8px;
-            padding: 10px;
-            margin-bottom: 10px;
-            border: 1px solid #333;
-        }
-
-        .message {
-            margin: 5px 0;
-            padding: 5px;
-            border-radius: 4px;
-            background: #2b2b2b;
-        }
-
-        .username {
-            font-weight: bold;
-        }
-
-        .admin {
-            color: #ff4081 !important;
-        }
-
-        #chat-input {
-            width: calc(100% - 70px);
-            padding: 10px;
-            border: none;
-            border-radius: 8px;
-            background-color: #2b2b2b;
-            color: white;
-        }
-
-        #send-btn {
-            width: 60px;
-            padding: 10px;
-            border: none;
-            border-radius: 8px;
-            margin-left: 5px;
-            background-color: #3a82f7;
-            cursor: pointer;
-        }
-
-        #send-btn:hover {
-            background-color: #2963c8;
-        }
-
-        #color-picker {
-            width: 100%;
-            margin-top: 10px;
-        }
-
-        #message {
-            color: #ff4d4d;
-            text-align: center;
-            margin-top: 10px;
-        }
+        input, button { width: 100%; margin-top: 10px; padding: 10px; border: none; border-radius: 8px; }
+        input { background: #2a2a2a; color: white; }
+        button { background: #3a82f7; color: white; font-weight: bold; cursor: pointer; }
+        button:hover { background: #2963c8; }
+        #chat-box { background: #181818; border: 1px solid #333; height: 350px; overflow-y: auto; border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+        .message { background: #2b2b2b; border-radius: 6px; margin: 5px 0; padding: 6px; }
+        .username { font-weight: bold; }
+        .admin { color: #ff4081 !important; }
+        #message { color: #ff5b5b; text-align: center; margin-top: 10px; }
     </style>
 </head>
 <body>
-    <!-- LOGIN -->
     <div id="login-container">
-        <h2>Willkommen 👋</h2>
+        <h2>Willkommen bei MiChat 💬</h2>
         <input type="text" id="username" placeholder="Benutzername">
         <input type="password" id="password" placeholder="Passwort">
         <input type="color" id="color-picker" value="#ffffff">
@@ -128,17 +32,15 @@
         <p id="message"></p>
     </div>
 
-    <!-- CHAT -->
-    <div id="chat-container" style="display: none;">
-        <h2>Chatraum 💬</h2>
+    <div id="chat-container" style="display:none;">
+        <h2>MiChat Raum 💭</h2>
         <div id="chat-box"></div>
-        <div style="display: flex;">
-            <input type="text" id="chat-input" placeholder="Nachricht eingeben...">
+        <div style="display:flex;">
+            <input type="text" id="chat-input" placeholder="Nachricht...">
             <button id="send-btn">Senden</button>
         </div>
     </div>
 
-    <!-- Skript -->
     <script src="/static/main.js"></script>
 </body>
 </html>
